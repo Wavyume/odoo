@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_lavasta_operation_directory_list" model="ir.ui.view">
+        <field name="name">lavasta.operation.directory.list</field>
+        <field name="model">lavasta.operation.directory</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="department_id"/>
+                <field name="execution_seconds"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lavasta_operation_directory_form" model="ir.ui.view">
+        <field name="name">lavasta.operation.directory.form</field>
+        <field name="model">lavasta.operation.directory</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="department_id"/>
+                        <field name="execution_seconds"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lavasta_operation_directory" model="ir.actions.act_window">
+        <field name="name">Довідник операцій</field>
+        <field name="res_model">lavasta.operation.directory</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="lavasta_operation_directory_menu"
+        name="Довідник операцій"
+        parent="mrp.menu_mrp_bom"
+        action="action_lavasta_operation_directory"
+        sequence="50"
+    />
+</odoo>

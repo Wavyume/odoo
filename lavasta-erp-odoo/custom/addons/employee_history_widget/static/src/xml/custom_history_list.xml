@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="EmployeeHistoryWidget.HistoryPanel" owl="1">
+        <div class="o_custom_history_panel d-flex flex-column h-100 w-100">
+            
+            <div class="custom-control-panel flex-shrink-0 d-flex flex-column mb-3 mt-2">
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-primary px-4 py-1" t-on-click="onAddRecord">
+                            Новий
+                        </button>
+                        <h4 class="mb-0 fw-bold">Історія виконань</h4>
+                    </div>
+                    
+                    <div class="w-50 mx-4">
+                        <div class="position-relative">
+                            <i class="fa fa-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                            <input type="text" class="form-control ps-5" placeholder="Пошук: замовлення, специфікація, операція..." t-on-input="onSearchInput" t-model="state.searchQuery"/>
+                        </div>
+                    </div>
+                    
+                    <div class="text-muted small">
+                        <span>1-<t t-esc="panelStats.count"/> / <t t-esc="panelStats.count"/></span>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-4 text-muted border-bottom pb-3" style="font-size: 0.9rem;">
+                    <span>Записів: <strong class="text-dark"><t t-esc="panelStats.count"/></strong></span>
+                    <span>Сумарно операцій (шт): <strong class="text-dark"><t t-esc="panelStats.qty"/></strong></span>
+                    <span>Сумарно секунд: <strong class="text-dark"><t t-esc="panelStats.seconds"/></strong></span>
+                    <span>Сумарно нараховано: <strong class="text-dark"><t t-esc="panelStats.accrued"/> ₴</strong></span>
+                </div>
+
+            </div>
+
+            <div class="flex-grow-1 position-relative">
+                <t t-call="web.X2ManyField"/>
+            </div>
+            
+        </div>
+    </t>
+</templates>

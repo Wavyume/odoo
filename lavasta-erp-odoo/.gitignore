@@ -1,0 +1,6 @@
+.venv/
+.odoo-data/
+__pycache__/
+*.py[cod]
+*.log
+odoo/

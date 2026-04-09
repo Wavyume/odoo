@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_form_inherit_history" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.history</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Історія виконань" name="work_history_page">
+                    <field name="work_history_ids" widget="custom_history_panel" nolabel="1"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

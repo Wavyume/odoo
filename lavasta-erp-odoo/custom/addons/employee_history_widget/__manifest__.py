@@ -3,12 +3,14 @@
     'version': '1.0',
     'category': 'Human Resources',
     'summary': 'Кастомна таблиця історії виконань співробітника',
-    'depends': ['hr', 'web', 'mrp'],
+    # ДОДАНО 'mrp', бо ми інтегруємось у меню Виробництва
+    'depends': ['hr', 'web', 'mrp'], 
     'data': [
         'security/ir.model.access.csv',
         'views/work_history_views.xml',
+        # ДОДАНО файл довідника операцій:
+        'views/operation_directory_views.xml', 
         'views/hr_employee_views.xml',
-        'views/operation_directory_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

@@ -25,12 +25,12 @@
                     title="Редагувати"
                 />
                 <button
-                    name="action_delete_record"
+                    name="unlink"
                     type="object"
                     icon="fa-trash"
                     class="btn-link text-danger"
                     title="Видалити"
-                    confirm="Ви впевнені?"
+                    confirm="Ви впевнені, що хочете видалити цю операцію?"
                 />
             </list>
         </field>

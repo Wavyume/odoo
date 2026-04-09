@@ -58,8 +58,7 @@ class LavastaOperationDirectory(models.Model):
         self._sync_from_mrp_operations()
         return super().web_search_read(*args, **kwargs)
 
-    @api.model
-    def action_open_new_modal(self):
+    def action_open_new_modal(self, *args, **kwargs):
         return {
             'type': 'ir.actions.act_window',
             'name': 'Нова операція',
@@ -68,7 +67,7 @@ class LavastaOperationDirectory(models.Model):
             'target': 'new',
         }
 
-    def action_open_edit_modal(self):
+    def action_open_edit_modal(self, *args, **kwargs):
         self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
@@ -78,8 +77,3 @@ class LavastaOperationDirectory(models.Model):
             'res_id': self.id,
             'target': 'new',
         }
-
-    def action_delete_record(self):
-        self.ensure_one()
-        self.sudo().unlink()
-        return {'type': 'ir.actions.client', 'tag': 'reload'}

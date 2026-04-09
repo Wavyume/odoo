@@ -5,7 +5,18 @@
         <field name="model">hr.employee</field>
         <field name="inherit_id" ref="hr.view_employee_form"/>
         <field name="arch" type="xml">
+            <xpath expr="//field[@name='department_id']" position="after">
+                <field name="lavasta_department_ids" widget="many2many_tags"/>
+            </xpath>
             <xpath expr="//notebook" position="inside">
+                <page string="Зарплата" name="lavasta_wage_page">
+                    <field name="lavasta_wage_ids" nolabel="1">
+                        <list editable="bottom">
+                            <field name="department_id" readonly="1"/>
+                            <field name="wage"/>
+                        </list>
+                    </field>
+                </page>
                 <page string="Історія виконань" name="work_history_page">
                     <field name="work_history_ids" widget="custom_history_panel" nolabel="1"/>
                 </page>

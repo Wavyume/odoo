@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_employee_work_history,employee.work.history,model_employee_work_history,base.group_user,1,1,1,1
+access_lavasta_employee_wage,lavasta.employee.wage,model_lavasta_employee_wage,base.group_user,1,1,1,1

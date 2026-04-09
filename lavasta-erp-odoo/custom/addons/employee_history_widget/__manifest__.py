@@ -12,6 +12,7 @@
         'views/operation_directory_views.xml', 
         'views/hr_employee_views.xml',
         'views/hr_attendance_views.xml',
+        'views/mrp_production_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

@@ -11,6 +11,7 @@
                         type="object"
                         string="Новий"
                         class="btn-primary"
+                        display="always"
                     />
                 </header>
                 <field name="name"/>

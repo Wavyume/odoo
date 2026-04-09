@@ -22,45 +22,41 @@ class LavastaOperationDirectory(models.Model):
         ),
     ]
 
-    def _prepare_execution_seconds_from_mrp(self, mrp_operation):
-        if 'time_cycle_manual' in mrp_operation._fields and mrp_operation.time_cycle_manual:
-            # In MRP this value is usually stored in minutes.
-            return int(mrp_operation.time_cycle_manual * 60)
-        return 0
-
     def _sync_from_mrp_operations(self):
         if self.env.context.get('lavasta_operation_sync_done'):
             return
 
-        mrp_operation_model = self.env['mrp.routing.workcenter']
         existing_names = set(
             self.with_context(lavasta_operation_sync_done=True).search([]).mapped('name')
         )
-
         values_to_create = []
-        for mrp_operation in mrp_operation_model.search([]):
-            operation_name = (mrp_operation.name or '').strip()
-            if not operation_name or operation_name in existing_names:
-                continue
 
-            values_to_create.append(
-                {
-                    'name': operation_name,
-                    'execution_seconds': self._prepare_execution_seconds_from_mrp(mrp_operation),
-                }
-            )
-            existing_names.add(operation_name)
+        # 1. Тянем из шаблонов (Специфікації)
+        for mrp_op in self.env['mrp.routing.workcenter'].search([]):
+            op_name = (mrp_op.name or '').strip()
+            if op_name and op_name not in existing_names:
+                seconds = int(mrp_op.time_cycle_manual * 60) if 'time_cycle_manual' in mrp_op._fields and mrp_op.time_cycle_manual else 0
+                values_to_create.append({'name': op_name, 'execution_seconds': seconds})
+                existing_names.add(op_name)
+
+        # 2. Тянем из реальных заказов (Робочі замовлення)
+        for workorder in self.env['mrp.workorder'].search([]):
+            op_name = (workorder.name or '').strip()
+            if op_name and op_name not in existing_names:
+                seconds = int(workorder.duration_expected * 60) if 'duration_expected' in workorder._fields and workorder.duration_expected else 0
+                values_to_create.append({'name': op_name, 'execution_seconds': seconds})
+                existing_names.add(op_name)
 
         if values_to_create:
             self.with_context(lavasta_operation_sync_done=True).create(values_to_create)
 
     @api.model
-    def search_read(self, domain=None, fields=None, offset=0, limit=None, order=None, **read_kwargs):
-        # Запускаем синхронизацию перед тем, как отдать данные в UI
+    def web_search_read(self, *args, **kwargs):
+        # Odoo UI вызывает именно web_search_read.
+        # Используем универсальную сигнатуру, чтобы не ломаться на различиях
+        # между версиями/патчами Odoo.
         self._sync_from_mrp_operations()
-        return super().search_read(
-            domain=domain, fields=fields, offset=offset, limit=limit, order=order, **read_kwargs
-        )
+        return super().web_search_read(*args, **kwargs)
 
     @api.model
     def action_open_new_modal(self):
@@ -85,5 +81,5 @@ class LavastaOperationDirectory(models.Model):
 
     def action_delete_record(self):
         self.ensure_one()
-        self.unlink()
+        self.sudo().unlink()
         return {'type': 'ir.actions.client', 'tag': 'reload'}

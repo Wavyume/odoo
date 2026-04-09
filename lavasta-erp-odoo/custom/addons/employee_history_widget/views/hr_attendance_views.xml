@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="lavasta_view_attendance_list_inherit" model="ir.ui.view">
+        <field name="name">hr.attendance.list.inherit.lavasta.status</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list/field[@name='employee_id']" position="after">
+                <field
+                    name="lavasta_attendance_status"
+                    widget="badge"
+                    decoration-success="lavasta_attendance_status == 'confirmed'"
+                    decoration-warning="lavasta_attendance_status == 'unconfirmed'"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>

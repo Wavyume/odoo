@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class LavastaOperationDirectory(models.Model):
@@ -54,9 +54,22 @@ class LavastaOperationDirectory(models.Model):
         if values_to_create:
             self.with_context(lavasta_operation_sync_done=True).create(values_to_create)
 
-    def search(self, domain, offset=0, limit=None, order=None):
+    @api.model
+    def search(self, domain, offset=0, limit=None, order=None, **kwargs):
         self._sync_from_mrp_operations()
-        return super().search(domain, offset=offset, limit=limit, order=order)
+        return super().search(
+            domain, offset=offset, limit=limit, order=order, **kwargs
+        )
+
+    @api.model
+    def action_open_new_modal(self):
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Нова операція',
+            'res_model': 'lavasta.operation.directory',
+            'view_mode': 'form',
+            'target': 'new',
+        }
 
     def action_open_edit_modal(self):
         self.ensure_one()

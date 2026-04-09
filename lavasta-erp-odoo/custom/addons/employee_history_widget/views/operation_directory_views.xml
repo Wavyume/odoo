@@ -4,24 +4,32 @@
         <field name="name">lavasta.operation.directory.list</field>
         <field name="model">lavasta.operation.directory</field>
         <field name="arch" type="xml">
-            <list delete="0">
+            <list create="0" delete="0">
+                <header>
+                    <button
+                        name="action_open_new_modal"
+                        type="object"
+                        string="Новий"
+                        class="btn-primary"
+                    />
+                </header>
                 <field name="name"/>
                 <field name="department_id"/>
                 <field name="execution_seconds"/>
                 <button
                     name="action_open_edit_modal"
                     type="object"
-                    string=" "
-                    class="btn btn-link fa fa-pencil"
+                    icon="fa-pencil"
+                    class="btn-link"
                     title="Редагувати"
                 />
                 <button
                     name="action_delete_record"
                     type="object"
-                    string=" "
-                    class="btn btn-link fa fa-trash text-danger"
+                    icon="fa-trash"
+                    class="btn-link text-danger"
                     title="Видалити"
-                    confirm="Видалити операцію?"
+                    confirm="Ви впевнені?"
                 />
             </list>
         </field>

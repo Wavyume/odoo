@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Розширення list-view робочих замовлень, який використовується у формі MO -->
+    <record id="mrp_workorder_tree_editable_lavasta" model="ir.ui.view">
+        <field name="name">mrp.workorder.tree.editable.lavasta</field>
+        <field name="model">mrp.workorder</field>
+        <field name="inherit_id" ref="mrp.mrp_production_workorder_tree_editable_view"/>
+        <field name="arch" type="xml">
+            <!-- Після очікуваної тривалості додаємо кастомні поля -->
+            <xpath expr="//list/field[@name='duration_expected']" position="after">
+                <field name="lavasta_individual_duration" optional="show"/>
+                <field
+                    name="lavasta_it_status"
+                    widget="badge"
+                    optional="show"
+                    decoration-success="lavasta_it_status == 'confirmed'"
+                    decoration-info="lavasta_it_status == 'draft'"
+                    decoration-warning="lavasta_it_status == 'pending'"
+                    decoration-danger="lavasta_it_status == 'rejected'"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>

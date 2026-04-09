@@ -14,9 +14,7 @@
                     widget="badge"
                     optional="show"
                     decoration-success="lavasta_it_status == 'confirmed'"
-                    decoration-info="lavasta_it_status == 'draft'"
-                    decoration-warning="lavasta_it_status == 'pending'"
-                    decoration-danger="lavasta_it_status == 'rejected'"
+                    decoration-warning="lavasta_it_status == 'not_confirmed'"
                 />
             </xpath>
         </field>

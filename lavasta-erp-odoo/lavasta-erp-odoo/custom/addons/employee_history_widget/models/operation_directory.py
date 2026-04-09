@@ -55,10 +55,11 @@ class LavastaOperationDirectory(models.Model):
             self.with_context(lavasta_operation_sync_done=True).create(values_to_create)
 
     @api.model
-    def search(self, domain, offset=0, limit=None, order=None, **kwargs):
+    def search_read(self, domain=None, fields=None, offset=0, limit=None, order=None, **read_kwargs):
+        # Запускаем синхронизацию перед тем, как отдать данные в UI
         self._sync_from_mrp_operations()
-        return super().search(
-            domain, offset=offset, limit=limit, order=order, **kwargs
+        return super().search_read(
+            domain=domain, fields=fields, offset=offset, limit=limit, order=order, **read_kwargs
         )
 
     @api.model

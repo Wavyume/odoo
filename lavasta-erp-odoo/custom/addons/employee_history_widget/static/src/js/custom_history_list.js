@@ -33,13 +33,15 @@ export class CustomHistoryPanel extends X2ManyField {
     }
 
     async onAddRecord() {
+        const employeeId = this.props.record.resId || this.props.record.data.id;
         await this.actionService.doAction({
             type: 'ir.actions.act_window',
             res_model: 'employee.work.history', // Вызываем нашу новую Python-модель
             views: [[false, 'form']],
             target: 'new',
             context: {
-                default_employee_id: this.props.record.data.id,
+                ...this.props.context,
+                default_employee_id: employeeId,
             }
         }, {
             onClose: () => this.props.record.load()

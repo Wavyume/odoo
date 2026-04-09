@@ -8,7 +8,7 @@
                 <field name="datetime"/>
                 <field name="order"/>
                 <field name="spec_op"/>
-                <field name="fact_op"/>
+                <field name="operation_id"/>
                 <field name="department_id"/>
                 <field name="seconds"/>
                 <field name="rate"/>
@@ -31,7 +31,7 @@
                             <field name="order"/>
                             <field name="department_id"/>
                             <field name="spec_op"/>
-                            <field name="fact_op"/>
+                            <field name="operation_id"/>
                         </group>
                         <group>
                             <field name="seconds"/>

@@ -9,7 +9,10 @@ class EmployeeWorkHistory(models.Model):
     datetime = fields.Datetime(string='Дата та час', default=fields.Datetime.now)
     order = fields.Char(string='Замовлення')
     spec_op = fields.Char(string='Операція зі специфікації')
-    fact_op = fields.Char(string='Операція (факт)')
+    operation_id = fields.Many2one(
+        'lavasta.operation.directory',
+        string='Операція (факт)',
+    )
     department_id = fields.Many2one('hr.department', string='Департамент')
     
     seconds = fields.Integer(string='Секунд (факт)')
@@ -23,3 +26,16 @@ class EmployeeWorkHistory(models.Model):
     def _compute_accrued(self):
         for record in self:
             record.accrued = record.seconds * record.rate * record.qty
+
+    @api.onchange('employee_id', 'department_id')
+    def _onchange_lavasta_employee_department_set_rate(self):
+        for record in self:
+            record.rate = 0.0
+            if not record.employee_id or not record.department_id:
+                continue
+
+            wage_line = record.employee_id.lavasta_wage_ids.filtered(
+                lambda line: line.department_id == record.department_id
+            )[:1]
+            if wage_line:
+                record.rate = wage_line.wage

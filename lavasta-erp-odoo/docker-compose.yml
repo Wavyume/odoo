@@ -41,7 +41,7 @@ services:
       ODOO_URL: http://odoo:8069
       ODOO_DB: testovaya
       ODOO_USER: admin
-      ODOO_PASSWORD: admin
+      ODOO_PASSWORD: "}[Ub0({c1|3X8a3m6z?£EKd"
       API_TOKEN: super_secret_123
 
 volumes:

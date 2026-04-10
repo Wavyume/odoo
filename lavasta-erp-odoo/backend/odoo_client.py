@@ -1,6 +1,7 @@
 import os
 import socket
 import xmlrpc.client
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -10,10 +11,10 @@ class OdooConnectionError(Exception):
 
 class OdooClient:
     def __init__(self) -> None:
-        self.url = os.getenv("ODOO_URL", "http://localhost:8069")
-        self.db = os.getenv("ODOO_DB", "testovaya")
-        self.username = os.getenv("ODOO_USER", "admin")
-        self.password = os.getenv("ODOO_PASSWORD", "}[Ub0({c1|3X8a3m6z?£EKd")
+        self.url = os.getenv("ODOO_URL", "http://odoo:8069")
+        self.db = os.getenv("ODOO_DB", "")
+        self.username = os.getenv("ODOO_USER", "")
+        self.password = os.getenv("ODOO_PASSWORD", "")
 
         self.uid: int | None = None
         self._common: xmlrpc.client.ServerProxy | None = None
@@ -80,3 +81,88 @@ class OdooClient:
                 raise OdooConnectionError(
                     f"Odoo RPC call failed ({model}.{method}): {second_exc}"
                 ) from exc
+
+    @staticmethod
+    def _utc_now_odoo() -> str:
+        """Return current UTC datetime in Odoo-compatible string format."""
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    @staticmethod
+    def _utc_today_bounds() -> tuple[str, str]:
+        """Return UTC day start/end bounds for robust 'today' filtering."""
+        now_utc = datetime.now(timezone.utc)
+        day_start = datetime(
+            now_utc.year,
+            now_utc.month,
+            now_utc.day,
+            0,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        )
+        day_end = day_start + timedelta(days=1)
+        return (
+            day_start.strftime("%Y-%m-%d %H:%M:%S"),
+            day_end.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    def get_today_attendance(self, employee_id: int) -> list[dict[str, Any]]:
+        """Get attendance entries for an employee for current UTC day."""
+        start_utc, end_utc = self._utc_today_bounds()
+        domain = [
+            ("employee_id", "=", employee_id),
+            ("check_in", ">=", start_utc),
+            ("check_in", "<", end_utc),
+        ]
+        return self.execute_kw(
+            "hr.attendance",
+            "search_read",
+            [domain],
+            {
+                "fields": ["id", "check_in", "check_out", "lavasta_attendance_status"],
+                "order": "check_in desc",
+            },
+        )
+
+    def attendance_action(
+        self,
+        employee_id: int,
+        action: str,
+        status: str | None = None,
+        manual_time: str | None = None,
+    ) -> int:
+        """
+        Start or end employee attendance.
+        - start: create open attendance with manual_time or current UTC check_in
+        - end: close latest open attendance (check_out is false) with manual_time or now
+        """
+        effective_time = manual_time or self._utc_now_odoo()
+
+        if action == "start":
+            values: dict[str, Any] = {
+                "employee_id": employee_id,
+                "check_in": effective_time,
+            }
+            values["lavasta_attendance_status"] = status
+            return int(self.execute_kw("hr.attendance", "create", [values]))
+
+        if action == "end":
+            open_records = self.execute_kw(
+                "hr.attendance",
+                "search_read",
+                [[("employee_id", "=", employee_id), ("check_out", "=", False)]],
+                {"fields": ["id"], "limit": 1, "order": "check_in desc"},
+            )
+            if not open_records:
+                raise ValueError("No open attendance found to close.")
+
+            attendance_id = int(open_records[0]["id"])
+            values = {
+                "check_out": effective_time,
+                "lavasta_attendance_status": status,
+            }
+
+            self.execute_kw("hr.attendance", "write", [[attendance_id], values])
+            return attendance_id
+
+        raise ValueError("Unsupported action. Use 'start' or 'end'.")

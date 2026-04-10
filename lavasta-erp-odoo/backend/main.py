@@ -1,8 +1,10 @@
 import os
+from typing import Literal
 from typing import Any
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from odoo_client import OdooClient, OdooConnectionError
 
@@ -66,10 +68,61 @@ class WorkHistoryItem(BaseModel):
     status: str | None
 
 
+class OperationDirectoryItem(BaseModel):
+    id: int
+    name: str
+    department_id: int | None
+
+
+class WorkOrderItem(BaseModel):
+    id: int
+    name: str
+    production_id: int | None
+    state: str | None
+    duration: float | None
+
+
+class AttendanceTodayResponse(BaseModel):
+    check_in: str | None
+    check_out: str | None
+    lavasta_attendance_status: str | None
+
+
+class AttendanceActionRequest(BaseModel):
+    employee_id: int = Field(..., gt=0)
+    action: Literal["start", "end"]
+    manual_time: str | None = Field(
+        default=None,
+        description="Manual datetime in format YYYY-MM-DD HH:MM:SS",
+    )
+    status: str | None = Field(
+        default=None,
+        description="Optional client field, backend calculates final status automatically.",
+    )
+
+    @field_validator("manual_time")
+    @classmethod
+    def validate_manual_time(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        try:
+            datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        except ValueError as exc:
+            raise ValueError("manual_time must be in format YYYY-MM-DD HH:MM:SS") from exc
+        return value
+
+
+class AttendanceActionResponse(BaseModel):
+    attendance_id: int
+    action: Literal["start", "end"]
+    message: str
+
+
 @app.post(
     "/api/v1/orders/create",
     response_model=OrderCreateResponse,
     dependencies=[Depends(verify_api_token)],
+    summary="Create manufacturing order in Odoo",
 )
 def create_order(payload: OrderCreateRequest) -> OrderCreateResponse:
     values = {
@@ -85,6 +138,7 @@ def create_order(payload: OrderCreateRequest) -> OrderCreateResponse:
     "/api/v1/employees/by-phone/{phone}",
     response_model=EmployeeByPhoneResponse,
     dependencies=[Depends(verify_api_token)],
+    summary="Get employee by phone number",
 )
 def get_employee_by_phone(phone: str) -> EmployeeByPhoneResponse:
     domain = ["|", ("mobile_phone", "ilike", phone), ("work_phone", "ilike", phone)]
@@ -116,6 +170,7 @@ def get_employee_by_phone(phone: str) -> EmployeeByPhoneResponse:
     "/api/v1/employees/{employee_id}/work-history",
     response_model=list[WorkHistoryItem],
     dependencies=[Depends(verify_api_token)],
+    summary="Get employee work history",
 )
 def get_work_history(
     employee_id: int,
@@ -155,3 +210,214 @@ def get_work_history(
         )
 
     return result
+
+
+@app.get(
+    "/api/v1/employees/{employee_id}/attendance/today",
+    response_model=AttendanceTodayResponse,
+    dependencies=[Depends(verify_api_token)],
+    summary="Get today's attendance state for employee",
+)
+def get_today_attendance(employee_id: int) -> AttendanceTodayResponse:
+    try:
+        records = odoo_client.get_today_attendance(employee_id=employee_id)
+    except OdooConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Odoo is unavailable: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Odoo RPC error: {exc}",
+        ) from exc
+
+    if not records:
+        return AttendanceTodayResponse(
+            check_in=None,
+            check_out=None,
+            lavasta_attendance_status=None,
+        )
+
+    latest = records[0]
+    return AttendanceTodayResponse(
+        check_in=latest.get("check_in"),
+        check_out=latest.get("check_out"),
+        lavasta_attendance_status=latest.get("lavasta_attendance_status"),
+    )
+
+
+@app.post(
+    "/api/v1/employees/attendance",
+    response_model=AttendanceActionResponse,
+    dependencies=[Depends(verify_api_token)],
+    summary="Start or end employee attendance shift",
+)
+def attendance_action(payload: AttendanceActionRequest) -> AttendanceActionResponse:
+    # Manual time means retrospective correction, so it requires confirmation later.
+    resolved_status: Literal["confirmed", "unconfirmed"] = (
+        "unconfirmed" if payload.manual_time else "confirmed"
+    )
+    try:
+        attendance_id = odoo_client.attendance_action(
+            employee_id=payload.employee_id,
+            action=payload.action,
+            status=resolved_status,
+            manual_time=payload.manual_time,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except OdooConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Odoo is unavailable: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Odoo RPC error: {exc}",
+        ) from exc
+
+    return AttendanceActionResponse(
+        attendance_id=attendance_id,
+        action=payload.action,
+        message=f"Attendance action '{payload.action}' completed successfully.",
+    )
+
+
+@app.get(
+    "/api/v1/operations/directory",
+    response_model=list[OperationDirectoryItem],
+    dependencies=[Depends(verify_api_token)],
+    summary="Get operation directory by department",
+)
+def get_operations_directory(department_id: int = Query(..., gt=0)) -> list[OperationDirectoryItem]:
+    records = _odoo_safe_execute(
+        "lavasta.operation.directory",
+        "search_read",
+        [[("department_id", "=", department_id)]],
+        {"fields": ["id", "name", "department_id"], "order": "id asc"},
+    )
+
+    result: list[OperationDirectoryItem] = []
+    for rec in records:
+        department_raw = rec.get("department_id")
+        result.append(
+            OperationDirectoryItem(
+                id=rec["id"],
+                name=rec.get("name", ""),
+                department_id=department_raw[0] if isinstance(department_raw, list) and department_raw else None,
+            )
+        )
+    return result
+
+
+@app.get(
+    "/api/v1/orders/operations/list",
+    response_model=list[dict[str, Any]],
+    dependencies=[Depends(verify_api_token)],
+    summary="Get work orders for multiple production orders",
+    description="Fetch work orders by production order IDs with optional department filter and detail level.",
+)
+def get_order_operations(
+    order_ids: list[int] = Query(..., description="List of Production Order IDs"),
+    department_id: int | None = Query(default=None, gt=0),
+    full_details: bool = Query(default=False, description="If true, returns all fields from Odoo"),
+) -> list[dict[str, Any]]:
+    domain: list[Any] = [("production_id", "in", order_ids)]
+
+    if department_id is not None:
+        directory_records = _odoo_safe_execute(
+            "lavasta.operation.directory",
+            "search_read",
+            [[("department_id", "=", department_id)]],
+            {"fields": ["name"]},
+        )
+        valid_names = [rec.get("name") for rec in directory_records if rec.get("name")]
+        if not valid_names:
+            return []
+        domain.append(("name", "in", valid_names))
+
+    records = _odoo_safe_execute(
+        "mrp.workorder",
+        "search_read",
+        [domain],
+        {
+            "fields": [] if full_details else ["id", "name", "production_id", "state", "duration"],
+            "order": "id asc",
+        },
+    )
+
+    if full_details:
+        return records
+
+    result: list[dict[str, Any]] = []
+    for rec in records:
+        production_raw = rec.get("production_id")
+        result.append(
+            {
+                "id": rec["id"],
+                "name": rec.get("name", ""),
+                "production_id": production_raw[0] if isinstance(production_raw, list) and production_raw else None,
+                "state": rec.get("state"),
+                "duration": rec.get("duration"),
+            }
+        )
+    return result
+
+
+@app.get(
+    "/api/v1/orders/operations",
+    dependencies=[Depends(verify_api_token)],
+    summary="Get operations for production orders",
+    description=(
+        "Two modes: "
+        "1) without op_id returns all operations for order_ids; "
+        "2) with op_id returns matching operation across provided order_ids."
+    ),
+    responses={
+        200: {"description": "Operations returned successfully."},
+        401: {"description": "Invalid API token."},
+        404: {"description": "Operation with provided op_id not found."},
+        503: {"description": "Odoo service is unavailable."},
+    },
+)
+def get_operation_details(
+    order_ids: list[int] = Query(
+        ...,
+        description="Required list of Production Order IDs (e.g. ?order_ids=10&order_ids=11).",
+    ),
+    op_id: int | None = Query(
+        default=None,
+        description="Optional Work Order ID. If omitted, returns all operations for provided orders.",
+    ),
+) -> dict[str, Any] | list[dict[str, Any]]:
+    if op_id is None:
+        return _odoo_safe_execute(
+            "mrp.workorder",
+            "search_read",
+            [[("production_id", "in", order_ids)]],
+            {"order": "id asc"},
+        )
+
+    records = _odoo_safe_execute("mrp.workorder", "read", [[op_id]], {})
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Operation with id '{op_id}' not found.",
+        )
+    base_operation = records[0]
+
+    operation_name = base_operation.get("name")
+    if not operation_name:
+        return []
+
+    return _odoo_safe_execute(
+        "mrp.workorder",
+        "search_read",
+        [[("name", "=", operation_name), ("production_id", "in", order_ids)]],
+        {"order": "id asc"},
+    )

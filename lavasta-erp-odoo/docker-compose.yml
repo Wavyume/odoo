@@ -30,6 +30,20 @@ services:
     command:
       - odoo
 
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - odoo
+    ports:
+      - "8000:8000"
+    environment:
+      ODOO_URL: http://odoo:8069
+      ODOO_DB: testovaya
+      ODOO_USER: admin
+      ODOO_PASSWORD: admin
+      API_TOKEN: super_secret_123
+
 volumes:
   db-data:
   odoo-data:

@@ -4,7 +4,10 @@ from odoo import api, fields, models
 class LavastaOperationDirectory(models.Model):
     _name = 'lavasta.operation.directory'
     _description = 'Довідник операцій'
+    _order = 'sequence, id'
 
+    sequence = fields.Integer(string='Sequence', default=10)
+    active = fields.Boolean(string='Active', default=True)
     name = fields.Char(string='Назва операції', required=True)
     department_id = fields.Many2one(
         'hr.department',
@@ -27,7 +30,10 @@ class LavastaOperationDirectory(models.Model):
             return
 
         existing_names = set(
-            self.with_context(lavasta_operation_sync_done=True).search([]).mapped('name')
+            self.with_context(
+                lavasta_operation_sync_done=True,
+                active_test=False,
+            ).search([]).mapped('name')
         )
         values_to_create = []
 
@@ -77,3 +83,8 @@ class LavastaOperationDirectory(models.Model):
             'res_id': self.id,
             'target': 'new',
         }
+
+    def action_soft_delete(self, *args, **kwargs):
+        self.ensure_one()
+        self.write({'active': False})
+        return {'type': 'ir.actions.client', 'tag': 'reload'}

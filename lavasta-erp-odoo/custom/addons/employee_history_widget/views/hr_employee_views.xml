@@ -10,6 +10,12 @@
             </xpath>
             <xpath expr="//page[@name='payroll_information']//group[@name='contract']" position="before">
                 <group string="Оклади за відділами" class="col-lg-10">
+                    <button
+                        string="Зберегти оклади"
+                        type="object"
+                        name="action_save_wages"
+                        class="btn-primary mb-2 oe_edit_only"
+                    />
                     <field name="lavasta_wage_ids" nolabel="1">
                         <list editable="bottom" create="0" delete="0">
                             <field name="department_id" readonly="1"/>

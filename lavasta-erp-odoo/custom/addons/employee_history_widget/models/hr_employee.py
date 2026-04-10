@@ -128,3 +128,7 @@ class HrEmployee(models.Model):
         if employees_to_sync:
             employees_to_sync._sync_lavasta_wages()
         return employees
+
+    def action_save_wages(self):
+        self.ensure_one()
+        return True

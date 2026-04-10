@@ -7,11 +7,10 @@ class EmployeeWorkHistory(models.Model):
 
     employee_id = fields.Many2one('hr.employee', string='Співробітник', required=True, ondelete='cascade')
     datetime = fields.Datetime(string='Дата та час', default=fields.Datetime.now)
-    order = fields.Char(string='Замовлення')
-    spec_op = fields.Char(string='Операція зі специфікації')
+    order_id = fields.Many2one('mrp.production', string='Замовлення')
     operation_id = fields.Many2one(
         'lavasta.operation.directory',
-        string='Операція (факт)',
+        string='Операція зі специфікації',
     )
     department_id = fields.Many2one('hr.department', string='Департамент')
     

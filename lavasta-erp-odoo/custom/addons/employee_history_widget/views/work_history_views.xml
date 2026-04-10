@@ -6,8 +6,7 @@
         <field name="arch" type="xml">
             <list create="0"> 
                 <field name="datetime"/>
-                <field name="order"/>
-                <field name="spec_op"/>
+                <field name="order_id"/>
                 <field name="operation_id"/>
                 <field name="department_id"/>
                 <field name="seconds"/>
@@ -28,10 +27,9 @@
                         <group>
                             <field name="employee_id" invisible="1"/>
                             <field name="datetime"/>
-                            <field name="order"/>
+                            <field name="order_id"/>
                             <field name="department_id"/>
-                            <field name="spec_op"/>
-                            <field name="operation_id"/>
+                            <field name="operation_id" domain="[('department_id', '=', department_id)]" options="{'no_create': True, 'no_open': True}"/>
                         </group>
                         <group>
                             <field name="seconds"/>

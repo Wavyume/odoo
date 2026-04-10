@@ -82,6 +82,22 @@ class WorkOrderItem(BaseModel):
     duration: float | None
 
 
+class DepartmentResponse(BaseModel):
+    id: int
+    name: str
+
+
+class CreateWorkOrderRequest(BaseModel):
+    production_id: int = Field(..., gt=0)
+    name: str = Field(..., min_length=1)
+    workcenter_id: int = Field(..., gt=0)
+    duration_expected: float | None = Field(default=None, ge=0)
+
+
+class CreateWorkOrderResponse(BaseModel):
+    id: int
+
+
 class AttendanceTodayResponse(BaseModel):
     check_in: str | None
     check_out: str | None
@@ -421,3 +437,92 @@ def get_operation_details(
         [[("name", "=", operation_name), ("production_id", "in", order_ids)]],
         {"order": "id asc"},
     )
+
+
+@app.get(
+    "/api/v1/departments",
+    response_model=list[DepartmentResponse],
+    dependencies=[Depends(verify_api_token)],
+    summary="Get departments used in operation directory",
+    description="Returns unique departments referenced by lavasta.operation.directory.",
+)
+def get_departments() -> list[DepartmentResponse]:
+    directory_records = _odoo_safe_execute(
+        "lavasta.operation.directory",
+        "search_read",
+        [[]],
+        {"fields": ["department_id"]},
+    )
+    department_ids = sorted(
+        {
+            rec["department_id"][0]
+            for rec in directory_records
+            if isinstance(rec.get("department_id"), list) and rec["department_id"]
+        }
+    )
+    if not department_ids:
+        return []
+
+    departments = _odoo_safe_execute(
+        "hr.department",
+        "search_read",
+        [[("id", "in", department_ids)]],
+        {"fields": ["id", "name"], "order": "name asc"},
+    )
+    return [DepartmentResponse(id=rec["id"], name=rec.get("name", "")) for rec in departments]
+
+
+@app.post(
+    "/api/v1/orders/operations",
+    response_model=CreateWorkOrderResponse,
+    dependencies=[Depends(verify_api_token)],
+    summary="Add operation to production order",
+    description="Creates a new mrp.workorder linked to a production order.",
+)
+def create_order_operation(payload: CreateWorkOrderRequest) -> CreateWorkOrderResponse:
+    values: dict[str, Any] = {
+        "production_id": payload.production_id,
+        "name": payload.name,
+        "workcenter_id": payload.workcenter_id,
+    }
+    if payload.duration_expected is not None:
+        values["duration_expected"] = payload.duration_expected
+
+    created_id = _odoo_safe_execute("mrp.workorder", "create", [values])
+    return CreateWorkOrderResponse(id=int(created_id))
+
+
+@app.delete(
+    "/api/v1/orders/operations/{workorder_id}",
+    dependencies=[Depends(verify_api_token)],
+    summary="Delete operation from production order",
+    description="Deletes mrp.workorder by ID within the specified production order. Operations in progress or done cannot be deleted.",
+)
+def delete_order_operation(
+    workorder_id: int,
+    production_id: int = Query(..., gt=0, description="Production Order ID"),
+) -> dict[str, Any]:
+    records = _odoo_safe_execute(
+        "mrp.workorder",
+        "search_read",
+        [[("id", "=", workorder_id), ("production_id", "=", production_id)]],
+        {"fields": ["id", "state", "production_id"], "limit": 1},
+    )
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Work order with id '{workorder_id}' "
+                f"for production_id '{production_id}' not found."
+            ),
+        )
+
+    state = records[0].get("state")
+    if state in {"progress", "done"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot delete work order in state '{state}'.",
+        )
+
+    _odoo_safe_execute("mrp.workorder", "unlink", [[workorder_id]])
+    return {"deleted": True, "id": workorder_id, "production_id": production_id}

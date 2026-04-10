@@ -10,6 +10,11 @@ class MrpWorkcenterProductivity(models.Model):
         ondelete="set null",
         copy=False,
     )
+    lavasta_qty = fields.Float(
+        string="Кількість од.",
+        default=1.0,
+        help="Кількість одиниць для нарахування; синхронізується з employee.work.history (qty).",
+    )
 
     def _get_lavasta_employee(self):
         self.ensure_one()
@@ -54,6 +59,8 @@ class MrpWorkcenterProductivity(models.Model):
         }
 
         history_fields = self.env["employee.work.history"]._fields
+        if "qty" in history_fields:
+            vals["qty"] = self.lavasta_qty
         if "datetime" in history_fields:
             vals["datetime"] = datetime_value
         elif "date" in history_fields:

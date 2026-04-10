@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Стандартний list/tree продуктивності: XML id у модулі mrp — oee_tree_view
+        (не mrp_workcenter_productivity_tree_view).
+    -->
+    <record id="mrp_workcenter_productivity_tree_lavasta_qty" model="ir.ui.view">
+        <field name="name">mrp.workcenter.productivity.tree.lavasta.qty</field>
+        <field name="model">mrp.workcenter.productivity</field>
+        <field name="inherit_id" ref="mrp.oee_tree_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='user_id']" position="after">
+                <field name="lavasta_qty" string="Кількість од."/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Time Tracking на формі робочого замовлення: вбудований tree/list у time_ids -->
+    <record id="mrp_workorder_time_ids_lavasta_qty" model="ir.ui.view">
+        <field name="name">mrp.workorder.form.time_ids.lavasta.qty</field>
+        <field name="model">mrp.workorder</field>
+        <field name="inherit_id" ref="mrp.mrp_production_workorder_form_view_inherit"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='time_ids']/*/field[@name='user_id']" position="after">
+                <field name="lavasta_qty" string="Кількість од."/>
+            </xpath>
+            <xpath expr="//field[@name='time_ids']/form//field[@name='user_id']" position="after">
+                <field name="lavasta_qty" string="Кількість од."/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

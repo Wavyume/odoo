@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class MrpWorkorder(models.Model):
     _inherit = 'mrp.workorder'
+
+    lavasta_total_qty = fields.Float(
+        string='Кількість',
+        compute='_compute_lavasta_total_qty',
+        store=True,
+        readonly=True,
+        help='Сума полів «Кількість од.» (lavasta_qty) у записах Time Tracking (time_ids).',
+    )
+
+    @api.depends('time_ids', 'time_ids.lavasta_qty')
+    def _compute_lavasta_total_qty(self):
+        for wo in self:
+            wo.lavasta_total_qty = sum(wo.time_ids.mapped('lavasta_qty'))
 
     # Тривалість з Telegram-бота (години або хвилини — як прийнято у вашому боті)
     lavasta_individual_duration = fields.Float(

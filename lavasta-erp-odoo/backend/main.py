@@ -3,8 +3,8 @@ from typing import Literal
 from typing import Any
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from odoo_client import OdooClient, OdooConnectionError
 
@@ -43,6 +43,19 @@ def _odoo_safe_execute(model: str, method: str, args: list[Any], kwargs: dict[st
         ) from exc
 
 
+def _productive_loss_id() -> int:
+    """Resolve Odoo productive time loss; fallback to id 1 if not found."""
+    loss_ids = _odoo_safe_execute(
+        "mrp.workcenter.productivity.loss",
+        "search",
+        [[("loss_type", "=", "productive")]],
+        {"limit": 1},
+    )
+    if loss_ids:
+        return int(loss_ids[0])
+    return 1
+
+
 class OrderCreateRequest(BaseModel):
     product_id: int = Field(..., gt=0)
     product_qty: float = Field(..., gt=0)
@@ -51,6 +64,14 @@ class OrderCreateRequest(BaseModel):
 
 class OrderCreateResponse(BaseModel):
     id: int
+
+
+class ProductionOrderResponse(BaseModel):
+    id: int
+    name: str
+    product_name: str | None
+    product_qty: float
+    state: str | None
 
 
 class EmployeeByPhoneResponse(BaseModel):
@@ -91,10 +112,50 @@ class CreateWorkOrderRequest(BaseModel):
     production_id: int = Field(..., gt=0)
     name: str = Field(..., min_length=1)
     workcenter_id: int = Field(..., gt=0)
-    duration_expected: float | None = Field(default=None, ge=0)
+    ind_duration: float | None = Field(
+        default=None,
+        ge=0,
+        description="Individual duration in minutes. If omitted, nominal time is used.",
+    )
 
 
 class CreateWorkOrderResponse(BaseModel):
+    id: int
+
+
+class WorkHistoryCreateRequest(BaseModel):
+    """Payload for recording work center productivity with explicit time range."""
+
+    employee_id: int = Field(..., gt=0)
+    production_id: int = Field(
+        ...,
+        gt=0,
+        description="Expected manufacturing order id (client reference); Odoo links MO via work order on productivity.",
+    )
+    workorder_id: int = Field(..., gt=0)
+    qty: float = Field(..., ge=0)
+    datetime_start: str = Field(..., description="Start datetime as YYYY-MM-DD HH:MM:SS")
+    datetime_end: str = Field(..., description="End datetime as YYYY-MM-DD HH:MM:SS")
+
+    @field_validator("datetime_start", "datetime_end")
+    @classmethod
+    def validate_datetime_format(cls, value: str) -> str:
+        try:
+            datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        except ValueError as exc:
+            raise ValueError("datetime_start and datetime_end must use format YYYY-MM-DD HH:MM:SS") from exc
+        return value
+
+    @model_validator(mode="after")
+    def validate_end_after_start(self) -> "WorkHistoryCreateRequest":
+        start = datetime.strptime(self.datetime_start, "%Y-%m-%d %H:%M:%S")
+        end = datetime.strptime(self.datetime_end, "%Y-%m-%d %H:%M:%S")
+        if end <= start:
+            raise ValueError("datetime_end must be strictly greater than datetime_start")
+        return self
+
+
+class WorkHistoryRecordResponse(BaseModel):
     id: int
 
 
@@ -148,6 +209,41 @@ def create_order(payload: OrderCreateRequest) -> OrderCreateResponse:
     }
     created_id = _odoo_safe_execute("mrp.production", "create", [values])
     return OrderCreateResponse(id=int(created_id))
+
+
+@app.get(
+    "/api/v1/orders/{order_id}",
+    response_model=ProductionOrderResponse,
+    dependencies=[Depends(verify_api_token)],
+    summary="Get production order by ID",
+    description="Loads one mrp.production record with product display name and quantities.",
+)
+def get_production_order(order_id: int = Path(..., gt=0)) -> ProductionOrderResponse:
+    records = _odoo_safe_execute(
+        "mrp.production",
+        "search_read",
+        [[("id", "=", order_id)]],
+        {"fields": ["id", "name", "product_id", "product_qty", "state"], "limit": 1},
+    )
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Production order with id '{order_id}' not found.",
+        )
+
+    rec = records[0]
+    product_raw = rec.get("product_id")
+    product_name: str | None = None
+    if isinstance(product_raw, list) and len(product_raw) > 1 and product_raw[1]:
+        product_name = str(product_raw[1])
+
+    return ProductionOrderResponse(
+        id=rec["id"],
+        name=rec.get("name", ""),
+        product_name=product_name,
+        product_qty=float(rec.get("product_qty") or 0),
+        state=rec.get("state"),
+    )
 
 
 @app.get(
@@ -485,8 +581,21 @@ def create_order_operation(payload: CreateWorkOrderRequest) -> CreateWorkOrderRe
         "name": payload.name,
         "workcenter_id": payload.workcenter_id,
     }
-    if payload.duration_expected is not None:
-        values["duration_expected"] = payload.duration_expected
+
+    dir_records = _odoo_safe_execute(
+        "lavasta.operation.directory",
+        "search_read",
+        [[("name", "=", payload.name)]],
+        {"fields": ["execution_seconds"], "limit": 1},
+    )
+    if dir_records:
+        seconds = dir_records[0].get("execution_seconds")
+        if seconds is not None and int(seconds) > 0:
+            values["duration_expected"] = int(seconds) / 60.0
+
+    if payload.ind_duration is not None and payload.ind_duration > 0:
+        values["lavasta_individual_duration"] = payload.ind_duration
+        values["lavasta_it_status"] = "not_confirmed"
 
     created_id = _odoo_safe_execute("mrp.workorder", "create", [values])
     return CreateWorkOrderResponse(id=int(created_id))
@@ -526,3 +635,72 @@ def delete_order_operation(
 
     _odoo_safe_execute("mrp.workorder", "unlink", [[workorder_id]])
     return {"deleted": True, "id": workorder_id, "production_id": production_id}
+
+
+@app.post(
+    "/api/v1/work-history/record",
+    response_model=WorkHistoryRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_api_token)],
+    summary="Record employee work output for a work order",
+    description=(
+        "Creates mrp.workcenter.productivity with lavasta_qty, date_start/date_end. "
+        "Odoo 19 stores operator as user_id (resolved from hr.employee); duration is computed from dates."
+    ),
+)
+def record_work_history(payload: WorkHistoryCreateRequest) -> WorkHistoryRecordResponse:
+    wo_records = _odoo_safe_execute(
+        "mrp.workorder",
+        "search_read",
+        [[("id", "=", payload.workorder_id)]],
+        {"fields": ["id", "workcenter_id"], "limit": 1},
+    )
+    if not wo_records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Work order id={payload.workorder_id} not found in Odoo.",
+        )
+
+    workcenter_raw = wo_records[0].get("workcenter_id")
+    workcenter_id = workcenter_raw[0] if isinstance(workcenter_raw, list) and workcenter_raw else None
+    if not workcenter_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Work order has no workcenter_id; cannot create productivity line.",
+        )
+
+    employee_records = _odoo_safe_execute(
+        "hr.employee",
+        "search_read",
+        [[("id", "=", payload.employee_id)]],
+        {"fields": ["id", "user_id"], "limit": 1},
+    )
+    if not employee_records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee id={payload.employee_id} not found in Odoo.",
+        )
+    user_raw = employee_records[0].get("user_id")
+    user_id = user_raw[0] if isinstance(user_raw, list) and user_raw else None
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Employee has no linked Odoo user (user_id). "
+                "mrp.workcenter.productivity requires user_id in Odoo 19."
+            ),
+        )
+
+    loss_id = _productive_loss_id()
+    # production_id is related readonly on productivity; duration is computed from date_start/date_end.
+    values: dict[str, Any] = {
+        "workorder_id": payload.workorder_id,
+        "workcenter_id": workcenter_id,
+        "user_id": user_id,
+        "lavasta_qty": payload.qty,
+        "date_start": payload.datetime_start,
+        "date_end": payload.datetime_end,
+        "loss_id": loss_id,
+    }
+    created_id = _odoo_safe_execute("mrp.workcenter.productivity", "create", [values])
+    return WorkHistoryRecordResponse(id=int(created_id))
